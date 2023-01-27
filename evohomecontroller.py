@@ -20,14 +20,14 @@
 
 
 from __future__ import print_function
-import serial                     # import the modules
+import serial as serial                    # import the modules
 import time
 import datetime
 
 output_log = open("Evohome_Controller.log", "w")
 
-ComPort = serial.Serial("/dev/ttyUSB0")   # open port COM8
-ComPort.baudrate = 115200          # set Baud rate to 250000
+ComPort = serial.Serial("COM4")   # open port /dev/ttyUSB0
+ComPort.baudrate = 115200          # set Baud rate
 ComPort.bytesize = 8              # Number of data bits = 8
 ComPort.parity   = 'N'            # No parity
 ComPort.stopbits = 1              # Number of Stop bits = 1
@@ -118,7 +118,7 @@ while True:
                     # TO DO: wait and check for confirmation of successful binding - W BIND message from device
                     print('Binding complete for Zone %d:(%s):(%s)' % (Device_count+1,Zone_INFO[Device_count][0],Zone_INFO[Device_count][1]))
                     Device_count += 1
-                for j in xrange(0,Device_count):
+                for j in range(0,Device_count):
                     print('Zone_INFO:%d:(%s):(%s):(%s)' % (j+1,Zone_INFO[j][0],Zone_INFO[j][1],Zone_INFO[j][4]))
             else:
                 if (Device_count > 0 and i < Device_count and Zone_INFO[i][0] == dev1):          # Only process messages further if message is from a device defined in Zone_INFO
