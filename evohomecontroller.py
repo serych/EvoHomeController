@@ -43,15 +43,15 @@ ControllerID = 0x55555            # Set this to any value as long as ControllerT
 #                  setpoint, placeholder for setpoint (Hex string),
 #                  placeholder for temp (Hex string)
 Zone_INFO = [
-    ['04:092553','Obyvak','','22.5','',''],
-    ['04:092555','Kuchyne','','22.5','',''],
-    ['04:092539','Loznice','','18.0','',''],
-    ['04:092791','Pokojicek','','20.5','','']
+    ['04:092553','Obyvak','','24.5','',''],  # 04:092553
+    ['','Kuchyne','','22.5','',''],  # 04:092555
+    ['','Loznice','','18.0','',''],  # 04:092539
+    ['','Pokojicek','','20.5','','']  # 04:092791
 ]
 
 Zone_num = 4                      # Number of zones
 
-Device_count = 4                  # Count of devices successfully bound
+Device_count = 1                  # Count of devices successfully bound
 
 Sync_dur = 60                    # Time interval between periodic SYNC messages (sec)
 SyncTXT = '{0:04X}'.format(Sync_dur * 10)
@@ -69,7 +69,8 @@ Com_DATE = 0x313F                 # Evohome Command DATE_TIME
 # Create controller values required for message structure
 ControllerTYPE = (ControllerID & 0xFC0000) >> 18;
 ControllerADDR = ControllerID & 0x03FFFF;
-ControllerTXT = bytearray(b'%02d:%06d' %(ControllerTYPE, ControllerADDR))
+#ControllerTXT = bytearray(b'%02d:%06d' %(ControllerTYPE, ControllerADDR))
+ControllerTXT = bytes("{0:02}:{1:06}".format(ControllerTYPE, ControllerADDR),"utf-8") #py3
 
 # Populate zone name Hex strings
 for i in range(0,Zone_num):
@@ -81,9 +82,10 @@ for i in range(0,Zone_num):
 for i in range(0,Zone_num):
     Hex_name = '{0:04X}'.format(int(float(Zone_INFO[i][3]) * 100))
     Zone_INFO[i][4] = Hex_name
-    print('Zone %d:(%s:%s):(0x%s):(%s:0x%s)' % (i+1,Zone_INFO[i][0],Zone_INFO[i][1],Zone_INFO[i][2],Zone_INFO[i][3],Zone_INFO[i][4]))
-
-print('ControllerID=0x%06X (%s)' % (ControllerID, ControllerTXT))
+    # print('Zone %d:(%s:%s):(0x%s):(%s:0x%s)' % (i+1,Zone_INFO[i][0],Zone_INFO[i][1],Zone_INFO[i][2],Zone_INFO[i][3],Zone_INFO[i][4]))
+    print('Zone {0}:({1}:{2}):(0x{3}):({4}:0x{5})'.format(i+1,Zone_INFO[i][0],Zone_INFO[i][1],Zone_INFO[i][2],Zone_INFO[i][3],Zone_INFO[i][4])) #py3
+# print('ControllerID=0x%06X (%s)' % (ControllerID, ControllerTXT))
+print('ControllerID=0x{0:06X} ({1})'.format(ControllerID, ControllerTXT))  #py3
 ##### End of setup
 
 ##### Main message processing loop (infinite)
@@ -101,6 +103,7 @@ while True:
             cmnd = data[41:45]               # Extract command
 
             print(data)                      # print the received data
+            print(data, file=output_log)
 
             ##### Check if device has already been defined
             i = 0
@@ -108,7 +111,8 @@ while True:
                 i += 1
 
             ##### Received BIND message
-            if ((msg_type == ' I') and (dev1 != ControllerTXT) and (cmnd == '%04X' % Com_BIND)):
+            # if ((msg_type == ' I') and (dev1 != ControllerTXT) and (cmnd == '%04X' % Com_BIND)):
+            if ((msg_type == b' I') and (dev1 != ControllerTXT) and (cmnd == b'1FC9')):
 
                 send_data = bytearray(b'I --- %s --:------ %s %04X 018 %02d2309%06X%02d30C9%06X%02d1FC9%06X\r\n' % (ControllerTXT, ControllerTXT, Com_BIND, i, ControllerID, i, ControllerID, i,ControllerID))
                 print('Send:(%s)' % send_data)
@@ -181,20 +185,24 @@ while True:
                                                 No = ComPort.write(send_data)
 
     else:
+        print("int")
+        Sync_time = time.time()
         if (Device_count > 0):
             ##### Send periodic SYNC message followed by ZONE_SETPOINT and ZONE_TEMP for all zones
-            Sync_time = time.time()
             send_data = bytearray('I --- %s --:------ %s %04X 003 FF%s\r\n' % (ControllerTXT, ControllerTXT, Com_SYNC, SyncTXT),'ASCII')
             print('Send:(%s)' % send_data)
+            print('>>>>:(%s)' % send_data, file=output_log)
             No = ComPort.write(send_data)
             SendTXT = ''.join(('{0:02d}'.format(j) + Zone_INFO[j][4]) for j in range(0, Device_count))
             Send_len = len(SendTXT) / 2
             send_data = bytearray('I --- %s --:------ %s %04X %03d %s\r\n' % (ControllerTXT, ControllerTXT, Com_SETP, Send_len, SendTXT),'ASCII')
             print('Send:(%s)' % send_data)
+            print('>>>>:(%s)' % send_data, file=output_log)
             No = ComPort.write(send_data)
             SendTXT = ''.join(('{0:02d}'.format(j) + Zone_INFO[j][5]) for j in range(0, Device_count))
             send_data = bytearray('I --- %s --:------ %s %04X %03d %s\r\n' % (ControllerTXT, ControllerTXT, Com_TEMP, Send_len, SendTXT),'ASCII')
             print('Send:(%s)' % send_data)
+            print('>>>>:(%s)' % send_data, file=output_log)
             No = ComPort.write(send_data)
 
 # TODO: This section is redundant at the moment
