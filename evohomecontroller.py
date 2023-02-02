@@ -1,8 +1,9 @@
 # Evohome Controller Moje vývojová verze
-# Copyright (c) 2017 Evsdd
-# Python 2.7.11
-# Requires pyserial module which can be installed using 'python -m pip install pyserial'
+# Copyright (c) 2023 JaSe
+# Python 3.x
+# Requires pyserial module which can be installed using 'python -m pip3 install pyserial'
 # Prototype program to provide controller functionality for Evohome HR92 devices
+# based on https://github.com/Evsdd/Evohome_Controller
 #
 #
 # This program is free software: you can redistribute it and/or modify
@@ -124,67 +125,48 @@ while True:
                     Device_count += 1
                 for j in range(0,Device_count):
                     print('Zone_INFO:%d:(%s):(%s):(%s)' % (j+1,Zone_INFO[j][0],Zone_INFO[j][1],Zone_INFO[j][4]))
-            else:
-                if (Device_count > 0 and i < Device_count and Zone_INFO[i][0] == dev1):          # Only process messages further if message is from a device defined in Zone_INFO
+            elif (Device_count > 0 and i < Device_count and Zone_INFO[i][0] == dev1):          # Only process messages further if message is from a device defined in Zone_INFO
 
-                    ##### Received BIND confirmation, respond with ZONE_NAME, SYNC and ZONE_SETPOINT
-                    if ((msg_type == ' W') and (cmnd == '%04X' % Com_BIND)):
-                        send_data = bytearray(b'I --- %s --:------ %s %04X 022 %02d00%s\r\n' % (ControllerTXT, ControllerTXT, Com_NAME, i, Zone_INFO[i][2]))
-                        print('Send:(%s)' % send_data)
-                        No = ComPort.write(send_data)
-                        send_data = bytearray(b'W --- %s --:------ %s %04X 003 FF0BB8\r\n' % (ControllerTXT, ControllerTXT, Com_SYNC)) # 5min SYNC 0x0BB8 = 3000 (300.0sec)
-                        print('Send:(%s)' % send_data)
-                        No = ComPort.write(send_data)
-                        send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_SETP, i, Zone_INFO[i][4]))
-                        print('Send:(%s)' % send_data)
-                        No = ComPort.write(send_data)
-                    else:
-                        ##### Received SYNC request, respond with SYNC
-                        if ((msg_type == 'RQ') and (cmnd == '%04X' % Com_SYNC)):
-                            SendTXT = '{0:04X}'.format(int((Sync_dur - (time.time() - Sync_time)) * 10))        # Calculate remaining time until next SYNC
-                            send_data = bytearray(b'RP --- %s %s --:------ %04X 003 00%s\r\n' % (ControllerTXT, dev1, Com_SYNC, SendTXT))
-                            print('Send:(%s)' % send_data)
-                            No = ComPort.write(send_data)
-                        else:
+                if ((msg_type == ' W') and (cmnd == '%04X' % Com_BIND)): ##### Received BIND confirmation, respond with ZONE_NAME, SYNC and ZONE_SETPOINT
+                    send_data = bytearray(b'I --- %s --:------ %s %04X 022 %02d00%s\r\n' % (ControllerTXT, ControllerTXT, Com_NAME, i, Zone_INFO[i][2]))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                    send_data = bytearray(b'W --- %s --:------ %s %04X 003 FF0BB8\r\n' % (ControllerTXT, ControllerTXT, Com_SYNC)) # 5min SYNC 0x0BB8 = 3000 (300.0sec)
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                    send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_SETP, i, Zone_INFO[i][4]))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                elif ((msg_type == 'RQ') and (cmnd == '%04X' % Com_SYNC)): ##### Received SYNC request, respond with SYNC
+                    SendTXT = '{0:04X}'.format(int((Sync_dur - (time.time() - Sync_time)) * 10))        # Calculate remaining time until next SYNC
+                    send_data = bytearray(b'RP --- %s %s --:------ %04X 003 00%s\r\n' % (ControllerTXT, dev1, Com_SYNC, SendTXT))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                elif ((msg_type == 'RQ') and (cmnd == '%04X' % Com_NAME)): ##### Received NAME request
+                    send_data = bytearray(b'RP --- %s %s --:------ %04X 022 %02d00%s\r\n' % (ControllerTXT, dev1, Com_NAME, i, Zone_INFO[i][2]))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                elif ((msg_type == ' I') and (cmnd == '%04X' % Com_TEMP)): ##### Received TEMP message, send echo response from controller
+                    Zone_INFO[i][5] = data[52:56]  # store TEMP in Zone_INFO
+                    send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_TEMP, i, Zone_INFO[i][5]))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                elif ((msg_type == ' I') and (cmnd == '%04X' % Com_SETP)): ##### Received SETP message, send echo response from controller
+                    send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_SETP, i, Zone_INFO[i][4]))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                elif ((msg_type == 'RQ') and (cmnd == '%04X' % Com_UNK)): ##### Received UNK request
+                    send_data = bytearray(b'RP --- %s %s --:------ %04X %s\r\n' % (ControllerTXT, dev1, Com_UNK, data[46:60]))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
+                elif ((msg_type == 'RQ') and (cmnd == '%04X' % Com_DATE)): ##### Received DATE request
+                    today = datetime.datetime.now()
+                    SendTXT = '{0:02X}'.format(int((today.hour)))+'{0:02X}'.format(int((today.minute)))+'{0:02X}'.format(int((today.second)))+'{0:02X}'.format(int((today.day)))+'{0:02X}'.format(int((today.month)))+'{0:04X}'.format(int((today.year)))
+                    send_data = bytearray(b'RP --- %s %s --:------ %04X 009 00FC%s\r\n' % (ControllerTXT, dev1, Com_DATE, SendTXT))
+                    print('Send:(%s)' % send_data)
+                    No = ComPort.write(send_data)
 
-                            ##### Received NAME request
-                            if ((msg_type == 'RQ') and (cmnd == '%04X' % Com_NAME)):
-                                send_data = bytearray(b'RP --- %s %s --:------ %04X 022 %02d00%s\r\n' % (ControllerTXT, dev1, Com_NAME, i, Zone_INFO[i][2]))
-                                print('Send:(%s)' % send_data)
-                                No = ComPort.write(send_data)
-                            else:
-
-                                ##### Received TEMP message, send echo response from controller
-                                if ((msg_type == ' I') and (cmnd == '%04X' % Com_TEMP)):
-                                    Zone_INFO[i][5] = data[52:56]  # store TEMP in Zone_INFO
-                                    send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_TEMP, i, Zone_INFO[i][5]))
-                                    print('Send:(%s)' % send_data)
-                                    No = ComPort.write(send_data)
-                                else:
-
-                                    ##### Received SETP message, send echo response from controller
-                                    if ((msg_type == ' I') and (cmnd == '%04X' % Com_SETP)):
-                                        send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_SETP, i, Zone_INFO[i][4]))
-                                        print('Send:(%s)' % send_data)
-                                        No = ComPort.write(send_data)
-                                    else:
-
-                                        ##### Received UNK request
-                                        if ((msg_type == 'RQ') and (cmnd == '%04X' % Com_UNK)):
-                                            send_data = bytearray(b'RP --- %s %s --:------ %04X %s\r\n' % (ControllerTXT, dev1, Com_UNK, data[46:60]))
-                                            print('Send:(%s)' % send_data)
-                                            No = ComPort.write(send_data)
-                                        else:
-
-                                            ##### Received DATE request
-                                            if ((msg_type == 'RQ') and (cmnd == '%04X' % Com_DATE)):
-                                                today = datetime.datetime.now()
-                                                SendTXT = '{0:02X}'.format(int((today.hour)))+'{0:02X}'.format(int((today.minute)))+'{0:02X}'.format(int((today.second)))+'{0:02X}'.format(int((today.day)))+'{0:02X}'.format(int((today.month)))+'{0:04X}'.format(int((today.year)))
-                                                send_data = bytearray(b'RP --- %s %s --:------ %04X 009 00FC%s\r\n' % (ControllerTXT, dev1, Com_DATE, SendTXT))
-                                                print('Send:(%s)' % send_data)
-                                                No = ComPort.write(send_data)
-
-    else:
+    else: #  ((time.time() - Sync_time) >=  Sync_dur)
         print("int")
         Sync_time = time.time()
         if (Device_count > 0):
