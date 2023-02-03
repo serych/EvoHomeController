@@ -24,8 +24,9 @@ from __future__ import print_function
 import serial as serial                    # import the modules
 import time
 import datetime
+from datetime import datetime
 
-output_log = open("Evohome_Controller.log", "w")
+output_log = open("evohome.log", "a") # zápis do logu append
 
 ComPort = serial.Serial("COM4")   # open port /dev/ttyUSB0
 ComPort.baudrate = 115200          # set Baud rate
@@ -34,7 +35,7 @@ ComPort.parity   = 'N'            # No parity
 ComPort.stopbits = 1              # Number of Stop bits = 1
 ComPort.timeout = 1               # Read timeout = 1sec
 
-send_data = bytearray('\r\n','ASCII')
+send_data = bytearray('\r\n','ASCII') # wakeup serial to air interface
 No = ComPort.write(send_data)
 # Set-up Controller and Zone information
 ControllerID = 0x55555            # Set this to any value as long as ControllerTYPE=1
@@ -54,23 +55,37 @@ Zone_num = 4                      # Number of zones
 
 Device_count = 1                  # Count of devices successfully bound
 
-Sync_dur = 60                    # Time interval between periodic SYNC messages (sec)
+Sync_dur = 300                    # Time interval between periodic SYNC messages (sec)
 SyncTXT = '{0:04X}'.format(Sync_dur * 10)
 Sync_time = time.time()
 
 Com_BIND = 0x1FC9                 # Evohome Command BIND
 Com_SYNC = 0x1F09                 # Evohome Command SYNC
 Com_NAME = 0x0004                 # Evohome Command ZONE_NAME
-Com_SETP = 0x2309                 # Evohome Command ZONE_SETPOINT
-Com_TEMP = 0x30C9                 # Evohome Command ZONE_TEMP
+Com_SETP = b'2309'                 # Evohome Command ZONE_SETPOINT
+Com_TEMP = b'30C9'                # Evohome Command ZONE_TEMP
 Com_UNK = 0x0100                  # Evohome Command ZONE_UNK (unknown)
 Com_DATE = 0x313F                 # Evohome Command DATE_TIME
+Com_X1 = 0x12B0                   # potřeba zjistit, co to je
+Com_X2 = 0x3150                   # potřeba zjistit, co to je
+def eh_is_cmd(data, msg_type,cmd): # funkce vrací boolean, true pokud v datech je zadaný typ zprávy a příkaz
+    d_msg_type = data[4:6]             # Extract message type
+    d_dev1 = data[11:20]               # Extract deviceID 1
+    d_dev2 = data[21:30]               # Extract deviceID 2
+    d_dev3 = data[31:40]               # Extract deviceID 3
+    d_cmnd = data[41:45]               # Extract command
+    return (d_msg_type) == msg_type and (d_cmnd == cmd)
 
+def eh_send(adr1, adr2, adr3, cmd, zone, data): #void, pošle data do logu, do konzole a na sériový port
+    send_data = bytes(' I --- {0} --:------ {1} {2} 003 {3:02}{4}\r\n'.format(adr1, adr3, cmd, zone, data),"ascii")
+    print('>>:\t{0}'.format(send_data))
+    print("{0} ->:\t{1}".format(datetime.now(),send_data), file=output_log)
+    No = ComPort.write(send_data)
+    return
 
 # Create controller values required for message structure
 ControllerTYPE = (ControllerID & 0xFC0000) >> 18;
 ControllerADDR = ControllerID & 0x03FFFF;
-#ControllerTXT = bytearray(b'%02d:%06d' %(ControllerTYPE, ControllerADDR))
 ControllerTXT = bytes("{0:02}:{1:06}".format(ControllerTYPE, ControllerADDR),"utf-8") #py3
 
 # Populate zone name Hex strings
@@ -83,11 +98,11 @@ for i in range(0,Zone_num):
 for i in range(0,Zone_num):
     Hex_name = '{0:04X}'.format(int(float(Zone_INFO[i][3]) * 100))
     Zone_INFO[i][4] = Hex_name
-    # print('Zone %d:(%s:%s):(0x%s):(%s:0x%s)' % (i+1,Zone_INFO[i][0],Zone_INFO[i][1],Zone_INFO[i][2],Zone_INFO[i][3],Zone_INFO[i][4]))
     print('Zone {0}:({1}:{2}):(0x{3}):({4}:0x{5})'.format(i+1,Zone_INFO[i][0],Zone_INFO[i][1],Zone_INFO[i][2],Zone_INFO[i][3],Zone_INFO[i][4])) #py3
-# print('ControllerID=0x%06X (%s)' % (ControllerID, ControllerTXT))
 print('ControllerID=0x{0:06X} ({1})'.format(ControllerID, ControllerTXT))  #py3
 ##### End of setup
+print("", file=output_log)  # log sepparator
+print("=========================== {0} ===========================".format(datetime.now()), file=output_log)
 
 ##### Main message processing loop (infinite)
 while True:
@@ -104,17 +119,15 @@ while True:
             cmnd = data[41:45]               # Extract command
 
             print(data)                      # print the received data
-            print(data, file=output_log)
+            print("{0} <-:\t{1}".format(datetime.now(),data), file=output_log)
 
             ##### Check if device has already been defined
             i = 0
             while (i < Device_count and Zone_INFO[i][0] != dev1):
                 i += 1
-
+            i -= 1
             ##### Received BIND message
-            # if ((msg_type == ' I') and (dev1 != ControllerTXT) and (cmnd == '%04X' % Com_BIND)):
-            if ((msg_type == b' I') and (dev1 != ControllerTXT) and (cmnd == b'1FC9')):
-
+            if eh_is_cmd(data, b' I', b'1FC9') and (dev1 != ControllerTXT):
                 send_data = bytearray(b'I --- %s --:------ %s %04X 018 %02d2309%06X%02d30C9%06X%02d1FC9%06X\r\n' % (ControllerTXT, ControllerTXT, Com_BIND, i, ControllerID, i, ControllerID, i,ControllerID))
                 print('Send:(%s)' % send_data)
                 No = ComPort.write(send_data)
@@ -125,7 +138,7 @@ while True:
                     Device_count += 1
                 for j in range(0,Device_count):
                     print('Zone_INFO:%d:(%s):(%s):(%s)' % (j+1,Zone_INFO[j][0],Zone_INFO[j][1],Zone_INFO[j][4]))
-            elif (Device_count > 0 and i < Device_count and Zone_INFO[i][0] == dev1):          # Only process messages further if message is from a device defined in Zone_INFO
+            elif (Device_count > 0 and i < Device_count and Zone_INFO[i][0].encode() == dev1):          # Only process messages further if message is from a device defined in Zone_INFO
 
                 if ((msg_type == ' W') and (cmnd == '%04X' % Com_BIND)): ##### Received BIND confirmation, respond with ZONE_NAME, SYNC and ZONE_SETPOINT
                     send_data = bytearray(b'I --- %s --:------ %s %04X 022 %02d00%s\r\n' % (ControllerTXT, ControllerTXT, Com_NAME, i, Zone_INFO[i][2]))
@@ -146,15 +159,16 @@ while True:
                     send_data = bytearray(b'RP --- %s %s --:------ %04X 022 %02d00%s\r\n' % (ControllerTXT, dev1, Com_NAME, i, Zone_INFO[i][2]))
                     print('Send:(%s)' % send_data)
                     No = ComPort.write(send_data)
-                elif ((msg_type == ' I') and (cmnd == '%04X' % Com_TEMP)): ##### Received TEMP message, send echo response from controller
+                # elif ((msg_type == ' I') and (cmnd == '%04X' % Com_TEMP)): ##### Received TEMP message, send echo response from controller
+                elif eh_is_cmd(data, b' I', Com_TEMP):
                     Zone_INFO[i][5] = data[52:56]  # store TEMP in Zone_INFO
-                    send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_TEMP, i, Zone_INFO[i][5]))
-                    print('Send:(%s)' % send_data)
-                    No = ComPort.write(send_data)
-                elif ((msg_type == ' I') and (cmnd == '%04X' % Com_SETP)): ##### Received SETP message, send echo response from controller
-                    send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_SETP, i, Zone_INFO[i][4]))
-                    print('Send:(%s)' % send_data)
-                    No = ComPort.write(send_data)
+                    eh_send(ControllerTXT, "", ControllerTXT,Com_TEMP,i,Zone_INFO[i][5])
+                #elif ((msg_type == ' I') and (cmnd == '%04X' % Com_SETP)): ##### Received SETP message, send echo response from controller
+                elif eh_is_cmd(data, b' I', Com_SETP):
+                    eh_send(ControllerTXT, "", ControllerTXT,Com_SETP,i,Zone_INFO[i][4])
+                    # send_data = bytearray(b'I --- %s --:------ %s %04X 003 %02d%s\r\n' % (ControllerTXT, ControllerTXT, Com_SETP, i, Zone_INFO[i][4]))
+                    # print('Send:(%s)' % send_data)
+                    # No = ComPort.write(send_data)
                 elif ((msg_type == 'RQ') and (cmnd == '%04X' % Com_UNK)): ##### Received UNK request
                     send_data = bytearray(b'RP --- %s %s --:------ %04X %s\r\n' % (ControllerTXT, dev1, Com_UNK, data[46:60]))
                     print('Send:(%s)' % send_data)
@@ -165,9 +179,9 @@ while True:
                     send_data = bytearray(b'RP --- %s %s --:------ %04X 009 00FC%s\r\n' % (ControllerTXT, dev1, Com_DATE, SendTXT))
                     print('Send:(%s)' % send_data)
                     No = ComPort.write(send_data)
-
     else: #  ((time.time() - Sync_time) >=  Sync_dur)
         print("int")
+        print("{0} ** Interval".format(datetime.now()), file=output_log)
         Sync_time = time.time()
         if (Device_count > 0):
             ##### Send periodic SYNC message followed by ZONE_SETPOINT and ZONE_TEMP for all zones
