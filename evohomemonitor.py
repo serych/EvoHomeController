@@ -23,18 +23,28 @@
 import serial as serial                    # import the modules
 from datetime import datetime
 import signal
+import sys
 
 # Ctrl-C signal handler
 def handler(signum, frame):
     res = input("Ctrl-c was pressed. Do you really want to exit? y/n ")
     if res == 'y':  # close gracefully and exit
         ComPort.close()               # Close the COM Port (
-        output_log.close(output_log)  # close file
+        output_log.close()  # close file
         exit(1)
 
 signal.signal(signal.SIGINT, handler)   #assignment of Ctrl-C handler
 
 output_log = open("monitor.log", "a") # zápis do logu append  ("w" for rewrite instead of append)
+
+# Detect the operating system and set the appropriate serial port name
+if sys.platform.startswith('linux'):
+    PortString = "/dev/ttyUSB0"  # Edit the value as you need
+elif sys.platform.startswith('win'):
+    PortString = "COM4"          # Edit the value as you need
+else:
+    # For other operating systems
+    PortString = ""  # You can set a default value here
 
 ComPort = serial.Serial("COM4")   # on linuxes something like:  /dev/ttyUSB0
 ComPort.baudrate = 115200          # set Baud rate
@@ -98,7 +108,7 @@ def code2cmd(code):
 
 print("", file=output_log)  # log sepparator
 print("=========================== {0} ===========================".
-      format(datetime.now()), file=output_log) # date/time of app start
+      format(datetime.now().strftime("%y-%m-%d %H:%M:%S")), file=output_log) # date/time of app start
 
 ##### Main message processing loop (infinite)
 while True:
@@ -119,5 +129,5 @@ while True:
                                                 msg_type,
                                                 code2cmd(cmnd))
         print(desc)     #print the description of the frame to stout
-        print("{0}:\t{1}".format(datetime.now(),data),
+        print("{0}: {1}".format(datetime.now().strftime("%y-%m-%d %H:%M:%S"),data),
               "\t# {0}".format(desc), file=output_log, flush = True)
