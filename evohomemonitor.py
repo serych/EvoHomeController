@@ -46,7 +46,7 @@ else:
     # For other operating systems
     PortString = ""  # You can set a default value here
 
-ComPort = serial.Serial("COM4")   # on linuxes something like:  /dev/ttyUSB0
+ComPort = serial.Serial(PortString)   # on linuxes something like:  /dev/ttyUSB0
 ComPort.baudrate = 115200          # set Baud rate
 ComPort.bytesize = 8              # Number of data bits = 8
 ComPort.parity   = 'N'            # No parity
